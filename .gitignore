@@ -1,162 +1,543 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
+import json
+import pandas as pd
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from itertools import combinations
+from sklearn.utils import resample
+import re  # For regex operations
+import matplotlib.pyplot as plt  # For plotting graphs
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, fcluster
 
-# C extensions
-*.so
+# Step 1: Load the JSON file
+file_path = r"C:\Users\marta\OneDrive\Desktop\paula\Master_Rotterdam\block 2\Computer science for business analytics\Paper\TVs-all-merged\TVs-all-merged.json"
+with open(file_path, 'r') as f:
+    data = json.load(f)
 
-# Distribution / packaging
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
+# Convert JSON data to DataFrame
+rows = []
+for product_id, shops in data.items():
+    for shop in shops:
+        features = shop.get("featuresMap", {})
+        features["title"] = shop.get("title", "unknown")
+        features["shop"] = shop.get("shop", "unknown")
+        features["modelID"] = shop.get("modelID", "unknown")
+        rows.append(features)
 
-# PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
-*.manifest
-*.spec
+df = pd.DataFrame(rows)
 
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
+# Core features
+core_features = ["Brand", "Screen Size Class", "Maximum Resolution", "Screen Refresh Rate", "TV Type"]
 
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
-.pytest_cache/
-cover/
+# Rename columns
+df.rename(columns={
+    "Screen Size Class": "screen_size",
+    "Brand": "brand",
+    "Maximum Resolution": "resolution",
+    "Screen Refresh Rate": "refresh_rate",
+    "TV Type": "tv_type"
+}, inplace=True)
 
-# Translations
-*.mo
-*.pot
+# Numeric and categorical features
+numeric_features = ["screen_size", "refresh_rate"]
+categorical_features = ["brand", "resolution", "tv_type"]
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# Numeric features
+df["screen_size"] = pd.to_numeric(df["screen_size"].str.extract(r'(\d+(\.\d+)?)', expand=False)[0], errors='coerce')
+df["refresh_rate"] = pd.to_numeric(df["refresh_rate"].str.extract(r'(\d+)', expand=False), errors='coerce')
 
-# Flask stuff:
-instance/
-.webassets-cache
+# Fill missing numeric values with mean
+df[numeric_features] = df[numeric_features].apply(lambda x: x.fillna(x.mean()))
 
-# Scrapy stuff:
-.scrapy
+# Fill missing categorical values with most common (mode)
+def fill_with_most_common(column):
+    most_common = df[column].mode()[0] if not df[column].mode().empty else "unknown"
+    df[column] = df[column].fillna(most_common)
 
-# Sphinx documentation
-docs/_build/
+for feature in categorical_features:
+    fill_with_most_common(feature)
 
-# PyBuilder
-.pybuilder/
-target/
+# One-hot encoding of categorical and normalizing numeric features
+df_encoded = pd.get_dummies(df, columns=categorical_features)
+df_encoded[numeric_features] = (df_encoded[numeric_features] - df_encoded[numeric_features].min()) / (
+    df_encoded[numeric_features].max() - df_encoded[numeric_features].min())
 
-# Jupyter Notebook
-.ipynb_checkpoints
+df_encoded['modelID'] = df['modelID']
+df_encoded.reset_index(drop=True, inplace=True)
 
-# IPython
-profile_default/
-ipython_config.py
+# Regex patterns for model words
+value_pattern = re.compile(r'^\d+(\.\d+)?[a-zA-Z]+$|^\d+(\.\d+)?$')
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
+def extract_model_words_title(title: str):
+    pattern = r'[a-zA-Z0-9]*(([0-9]+[^0-9, ]+)|([^0-9, ]+[0-9]+))[a-zA-Z0-9]*'
+    matches = re.findall(pattern, title)
+    model_words = set()
+    for match in matches:
+        combined = ''.join(match)
+        combined = combined.lower().strip()
+        if combined:
+            model_words.add(combined)
+    return model_words
 
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
+def extract_model_words_values(values_dict):
+    model_words = set()
+    smart_tv_value = values_dict.get("Smart TV", None)
+    if isinstance(smart_tv_value, str):
+        if smart_tv_value.strip().lower() == "yes":
+            model_words.add("smart_tv")
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+    for k, v in values_dict.items():
+        if k in ["title", "shop", "modelID", "Smart TV"]:
+            continue
+        if not isinstance(v, str):
+            continue
+        val = v.lower().strip()
+        tokens = re.split(r'[^a-z0-9.\-]+', val)
+        tokens = [t for t in tokens if t]
 
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
+        for token in tokens:
+            if value_pattern.match(token):
+                numeric_part = re.match(r'(\d+(\.\d+)?)', token)
+                if numeric_part:
+                    num_value = numeric_part.group(1)
+                    model_words.add(num_value)
+            else:
+                numeric_segments = re.findall(r'\d+(\.\d+)?', token)
+                for nval in numeric_segments:
+                    model_words.add(nval)
+    return model_words
 
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
+top_brands = {"samsung", "sony", "lg", "sharp"}
 
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
+def extract_all_model_words(row):
+    title_words = extract_model_words_title(row['title'])
+    values_dict = row.to_dict()
+    value_words = extract_model_words_values(values_dict)
 
-# SageMath parsed files
-*.sage.py
+    brand_name = row.get("brand", "unknown")
+    if isinstance(brand_name, str):
+        brand_name = brand_name.lower().strip()
+        if brand_name in top_brands:
+            value_words.add("top_brand")
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+    return title_words.union(value_words)
 
-# Spyder project settings
-.spyderproject
-.spyproject
+df_encoded['model_words'] = df_encoded.apply(extract_all_model_words, axis=1)
 
-# Rope project settings
-.ropeproject
+# Build vocabulary
+vocab = list(set().union(*df_encoded['model_words']))
+vocab_index = {model_word: idx for idx, model_word in enumerate(vocab)}
 
-# mkdocs documentation
-/site
+def one_hot_model_words(model_words):
+    vector = [0] * len(vocab)
+    for word in model_words:
+        if word in vocab_index:
+            idx = vocab_index[word]
+            vector[idx] = 1
+    return vector
 
-# mypy
-.mypy_cache/
-.dmypy.json
-dmypy.json
+df_encoded['one_hot_model_words'] = df_encoded['model_words'].apply(one_hot_model_words)
 
-# Pyre type checker
-.pyre/
+# Instead of permutations, I define a large prime p and hash functions
+p = 2_000_003  # A large prime number for hashing
+n = 100  # number of hash functions
 
-# pytype static type analyzer
-.pytype/
+def build_minhash_functions(vocab_size: int, n: int):
+    """
+    Build n minhash functions characterized by (a, b) parameters.
+    h(x) = (a + b*x) mod p
+    """
+    rng = np.random.default_rng()
+    a_values = rng.integers(low=1, high=p, size=n)  # nonzero 'a'
+    b_values = rng.integers(low=0, high=p, size=n)
+    hash_funcs = list(zip(a_values, b_values))
+    return hash_funcs
 
-# Cython debug symbols
-cython_debug/
+hash_funcs = build_minhash_functions(len(vocab), n)
 
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+def create_signature(vector: list, hash_funcs: list):
+    """
+    Compute the minhash signature for a given binary vector using the given hash functions.
+    """
+    signature = []
+    for (a, b) in hash_funcs:
+        min_hash_val = float('inf')
+        for x, val in enumerate(vector):
+            if val == 1:
+                h = (a + b*x) % p
+                if h < min_hash_val:
+                    min_hash_val = h
+        signature.append(min_hash_val)
+    return signature
+
+df_encoded['signatures'] = df_encoded['one_hot_model_words'].apply(lambda x: create_signature(x, hash_funcs))
+
+def split_vector(signature, num_bands_value):
+    rows_per_band = len(signature) // num_bands_value
+    if rows_per_band == 0:
+        raise ValueError("Number of bands exceeds the signature length.")
+    sub_vectors = []
+    for idx in range(0, len(signature), rows_per_band):
+        sub_vectors.append(tuple(signature[idx:idx + rows_per_band]))
+    return sub_vectors
+
+def compute_jaccard_similarity(idx1, idx2):
+    model_words1 = df_encoded.loc[idx1, 'model_words']
+    model_words2 = df_encoded.loc[idx2, 'model_words']
+    intersection = model_words1.intersection(model_words2)
+    union = model_words1.union(model_words2)
+    return len(intersection) / len(union) if len(union) > 0 else 0
+
+def find_candidate_pairs(dataframe, t):
+    buckets = {}
+    candidate_pairs_set = set()
+    for index, row in dataframe.iterrows():
+        for band in row['bands']:
+            if band not in buckets:
+                buckets[band] = []
+            else:
+                for other_index in buckets[band]:
+                    jaccard_sim = compute_jaccard_similarity(index, other_index)
+                    if jaccard_sim >= t:
+                        candidate_pairs_set.add((min(index, other_index), max(index, other_index)))
+            buckets[band].append(index)
+    return candidate_pairs_set
+
+def is_true_duplicate(idx1, idx2):
+    model_id1 = df_encoded.loc[idx1, 'modelID']
+    model_id2 = df_encoded.loc[idx2, 'modelID']
+    return model_id1 == model_id2 and model_id1 != 'unknown'
+
+#Hierarchical clustering
+
+
+#Dissimilarity matrix
+dissimilarity_matrix = np.full((len(df_encoded), len(df_encoded)), float('inf'))
+for idx1, idx2 in combinations(range(len(df_encoded)), 2):
+    if is_true_duplicate(idx1, idx2):
+        similarity = compute_jaccard_similarity(idx1, idx2)  # Using Jaccard similarity
+        dissimilarity = 1 - similarity
+    else:
+        dissimilarity = float('inf')
+    dissimilarity_matrix[idx1, idx2] = dissimilarity
+    dissimilarity_matrix[idx2, idx1] = dissimilarity
+
+# Replacing inf with a large number for clustering
+finite_dissimilarity_matrix = np.where(np.isinf(dissimilarity_matrix), 1e9, dissimilarity_matrix)
+# Condensed dissimilarity matrix for linkage
+condensed_dissimilarity = squareform(finite_dissimilarity_matrix, checks=False)
+
+#Clustering threshold
+cluster_threshold = 0.2
+
+#Hierarchical clustering using single linkage
+df_encoded['cluster'] = fcluster(linkage(condensed_dissimilarity, method='single'),
+                                 t=cluster_threshold, criterion='distance')
+
+print("Clustering completed. Assigned clusters to data.")
+
+# Evaluating different (b, r) configurations
+
+b_values_plot = [1, 2, 4, 5, 10]
+r_values_plot = [n // b for b in b_values_plot]
+thresholds_plot = [(1 / b_val) ** (1 / r_val) for b_val, r_val in zip(b_values_plot, r_values_plot)]
+
+results_plot = []
+for b_val, r_val, t in zip(b_values_plot, r_values_plot, thresholds_plot):
+    print(f"Evaluating (b={b_val}, r={r_val}, threshold={t:.4f})")
+    df_encoded['bands'] = df_encoded['signatures'].apply(lambda x: split_vector(x, b_val))
+    candidate_pairs = find_candidate_pairs(df_encoded, t)
+    num_candidate_pairs = len(candidate_pairs)
+    true_duplicates_found = sum(1 for idx1, idx2 in candidate_pairs if is_true_duplicate(idx1, idx2))
+
+    pair_quality = true_duplicates_found / num_candidate_pairs if num_candidate_pairs > 0 else 0
+    pair_completeness = true_duplicates_found / (len(df_encoded) * (len(df_encoded) - 1) // 2)
+    f1_star_measure = (2 * pair_quality * pair_completeness) / (pair_quality + pair_completeness) if (pair_quality + pair_completeness) > 0 else 0
+
+    results_plot.append({
+        'b': b_val,
+        'r': r_val,
+        'threshold': t,
+        'pair_quality': pair_quality,
+        'pair_completeness': pair_completeness,
+        'f1_star_measure': f1_star_measure
+    })
+
+results_df_plot = pd.DataFrame(results_plot)
+print("\nEvaluation of (b, r) configurations:")
+print(results_df_plot)
+
+# Plot of Pair Quality vs. Pair Completeness for different (b, r)
+plt.figure(figsize=(10, 6))
+for _, row in results_df_plot.iterrows():
+    plt.scatter(row['pair_completeness'], row['pair_quality'], label=f"b={row['b']},r={row['r']}")
+plt.xlabel("Pair Completeness")
+plt.ylabel("Pair Quality")
+plt.title("Pair Quality vs. Pair Completeness for different (b, r)")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Plot of F1*-Measure vs. Threshold for different (b, r)
+plt.figure(figsize=(10,6))
+plt.plot(results_df_plot['threshold'], results_df_plot['f1_star_measure'], marker='o', label='F1*-Measure')
+plt.xlabel("Threshold")
+plt.ylabel("F1*-Measure")
+plt.title("F1*-Measure vs. Threshold for different (b, r)")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# After evaluating (b, r), I chose b=10 and r=10 as fixed configuration
+b = 10
+r = 10
+t = (1 / b) ** (1 / r)
+
+print(f"\nUsing fixed configuration: b={b}, r={r}, threshold={t:.4f}")
+
+# Redefining bands with the chosen configuration
+df_encoded['bands'] = df_encoded['signatures'].apply(lambda x: split_vector(x, b))
+
+# Preparing features for MSM similarity
+columns_to_drop = ['model_words', 'one_hot_model_words', 'signatures', 'bands', 'modelID', 'title', 'shop']
+df_features = df_encoded.drop(columns=columns_to_drop, errors='ignore').select_dtypes(include=[np.number])
+df_features = df_features.reindex(sorted(df_features.columns), axis=1)
+
+def q_gram_similarity(s1, s2, q=3):
+    def q_grams(string):
+        return {string[i:i+q] for i in range(len(string) - q + 1)}
+    q_grams1 = q_grams(s1)
+    q_grams2 = q_grams(s2)
+    intersection = q_grams1.intersection(q_grams2)
+    union = q_grams1.union(q_grams2)
+    return len(intersection) / len(union) if union else 0
+
+def hsm_similarity(non_matched_kv1, non_matched_kv2):
+    matches = 0
+    total = max(len(non_matched_kv1), len(non_matched_kv2))
+    for key1 in non_matched_kv1:
+        for key2 in non_matched_kv2:
+            if key1 == key2:
+                matches += 1
+    return matches / total if total > 0 else 0
+
+def compute_cosine_similarity(idx1, idx2):
+    vector1 = df_features.loc[idx1].values.reshape(1, -1)
+    vector2 = df_features.loc[idx2].values.reshape(1, -1)
+    similarity = cosine_similarity(vector1, vector2)[0][0]
+    return similarity
+
+def compute_key_value_similarity(idx1, idx2):
+    core_feature_keys = ['brand', 'screen_size', 'resolution', 'refresh_rate', 'tv_type']
+    match_count = 0
+    for kf in core_feature_keys:
+        if kf in df.columns:
+            if df.loc[idx1, kf] == df.loc[idx2, kf]:
+                match_count += 1
+    return match_count / len(core_feature_keys)
+
+def compute_msm_similarity(idx1, idx2, alpha=0.3, beta=0.2, gamma=0.2, delta=0.2, epsilon=0.1):
+    cosine_sim = compute_cosine_similarity(idx1, idx2)
+    jaccard_sim = compute_jaccard_similarity(idx1, idx2)
+    key_value_sim = compute_key_value_similarity(idx1, idx2)
+    title1 = df_encoded.loc[idx1, 'title']
+    title2 = df_encoded.loc[idx2, 'title']
+    q_gram_sim = q_gram_similarity(title1, title2)
+
+    non_matched_kv1 = df.loc[idx1, :].to_dict()
+    non_matched_kv2 = df.loc[idx2, :].to_dict()
+    hsm_sim = hsm_similarity(non_matched_kv1, non_matched_kv2)
+
+    combined_similarity = (
+        alpha * cosine_sim +
+        beta * jaccard_sim +
+        gamma * key_value_sim +
+        delta * q_gram_sim +
+        epsilon * hsm_sim
+    )
+    return combined_similarity
+
+# Bootstrapping with the chosen configuration (b=10, r=10)
+print("Starting bootstrapping...")
+
+alpha_value = 0.3
+beta_value = 0.2
+gamma_value = 0.2
+delta_value = 0.2
+epsilon_value = 0.1
+similarity_threshold = 0.85
+
+num_bootstraps = 5
+bootstrap_metrics = []
+
+for b_iter in range(num_bootstraps):
+    print(f"Bootstrap iteration {b_iter + 1}/{num_bootstraps}")
+    sampled_indices = np.random.choice(df_encoded.index, size=int(0.63 * len(df_encoded)), replace=True)
+    df_sampled = df_encoded.loc[sampled_indices]
+    out_of_sample_indices = list(set(df_encoded.index) - set(sampled_indices))
+    df_out_sample = df_encoded.loc[out_of_sample_indices]
+
+    # Recompute candidate pairs within the sampled data
+    candidate_pairs = find_candidate_pairs(df_sampled, t)
+
+    similarity_results = []
+    for idx1, idx2 in candidate_pairs:
+        msm_sim = compute_msm_similarity(idx1, idx2, alpha_value, beta_value, gamma_value, delta_value, epsilon_value)
+        similarity_results.append({
+            'index1': idx1,
+            'index2': idx2,
+            'msm_similarity': msm_sim
+        })
+
+    predicted_duplicates = [(r['index1'], r['index2']) for r in similarity_results if r['msm_similarity'] >= similarity_threshold]
+
+    TP = 0
+    FP = 0
+    FN = 0
+    TN = 0
+
+    all_indices_sampled = df_sampled.index.tolist()
+    all_possible_pairs_sampled = set(combinations(all_indices_sampled, 2))
+    total_duplicates = sum(1 for idx1, idx2 in all_possible_pairs_sampled if is_true_duplicate(idx1, idx2))
+
+    for idx1, idx2 in predicted_duplicates:
+        if is_true_duplicate(idx1, idx2):
+            TP += 1
+        else:
+            FP += 1
+
+    predicted_duplicate_pairs = set(predicted_duplicates)
+    for result in similarity_results:
+        idx1 = result['index1']
+        idx2 = result['index2']
+        if (idx1, idx2) not in predicted_duplicate_pairs:
+            if is_true_duplicate(idx1, idx2):
+                FN += 1
+            else:
+                TN += 1
+
+    non_candidate_pairs = all_possible_pairs_sampled - candidate_pairs
+    for idx1, idx2 in non_candidate_pairs:
+        if is_true_duplicate(idx1, idx2):
+            FN += 1
+        else:
+            TN += 1
+
+    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
+    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
+    f1_measure = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    pair_quality = TP / len(candidate_pairs) if len(candidate_pairs) > 0 else 0
+    pair_completeness = TP / total_duplicates if total_duplicates > 0 else 0
+    f1_star_measure = 2 * (pair_quality * pair_completeness) / (pair_quality + pair_completeness) if (
+        pair_quality + pair_completeness) > 0 else 0
+
+    bootstrap_metrics.append({
+        'precision': precision,
+        'recall': recall,
+        'f1_measure': f1_measure,
+        'pair_quality': pair_quality,
+        'pair_completeness': pair_completeness,
+        'f1_star_measure': f1_star_measure
+    })
+
+# Average metrics across all bootstraps
+avg_precision = np.mean([m['precision'] for m in bootstrap_metrics])
+avg_recall = np.mean([m['recall'] for m in bootstrap_metrics])
+avg_f1_measure = np.mean([m['f1_measure'] for m in bootstrap_metrics])
+avg_pair_quality = np.mean([m['pair_quality'] for m in bootstrap_metrics])
+avg_pair_completeness = np.mean([m['pair_completeness'] for m in bootstrap_metrics])
+avg_f1_star_measure = np.mean([m['f1_star_measure'] for m in bootstrap_metrics])
+
+print("\nFinal Evaluation Metrics after Bootstrapping:")
+print(f"Average Precision: {avg_precision:.4f}")
+print(f"Average Recall: {avg_recall:.4f}")
+print(f"Average F1-measure: {avg_f1_measure:.4f}")
+print(f"Average Pair Quality: {avg_pair_quality:.4f}")
+print(f"Average Pair Completeness: {avg_pair_completeness:.4f}")
+print(f"Average F1*-Measure: {avg_f1_star_measure:.4f}")
+
+#Plots
+
+def calculate_metrics(candidate_pairs, true_duplicates, total_comparisons):
+    tp = len([pair for pair in candidate_pairs if pair in true_duplicates])
+    fp = len(candidate_pairs) - tp
+    fn = len(true_duplicates) - tp
+
+    pair_completeness = tp / (tp + fn) if (tp + fn) > 0 else 0
+    pair_quality = tp / (tp + fp) if (tp + fp) > 0 else 0
+    f1_measure = (2 * pair_quality * pair_completeness) / (pair_quality + pair_completeness) if (pair_quality + pair_completeness) > 0 else 0
+    fraction_of_comparisons = len(candidate_pairs) / total_comparisons if total_comparisons > 0 else 0
+
+    return pair_quality, pair_completeness, f1_measure, fraction_of_comparisons
+
+# Generate true duplicates and total comparisons
+all_indices = list(range(len(df_encoded)))
+true_duplicates = set([tuple(sorted((i, j))) for i, j in combinations(all_indices, 2) if is_true_duplicate(i, j)])
+total_comparisons = len(all_indices) * (len(all_indices) - 1) // 2
+
+results = []
+b_values = [1, 2, 4, 5, 10]
+r_values = [100 // b for b in b_values]
+thresholds = [(1 / b) ** (1 / r) for b, r in zip(b_values, r_values)]
+
+for b, r, t in zip(b_values, r_values, thresholds):
+    print(f"Evaluating b={b}, r={r}, threshold={t:.4f}")
+    df_encoded["bands"] = df_encoded["signatures"].apply(lambda x: split_vector(x, b))
+    candidate_pairs = find_candidate_pairs(df_encoded, t)
+
+    pair_quality, pair_completeness, f1_measure, fraction_of_comparisons = calculate_metrics(
+        candidate_pairs, true_duplicates, total_comparisons
+    )
+    results.append({
+        "b": b,
+        "r": r,
+        "threshold": t,
+        "pair_quality": pair_quality,
+        "pair_completeness": pair_completeness,
+        "f1_measure": f1_measure,
+        "fraction_of_comparisons": fraction_of_comparisons,
+    })
+
+# Convert results to DataFrame for plotting
+results_df = pd.DataFrame(results)
+
+# Plot Pair Completeness vs Fraction of Comparisons
+plt.figure(figsize=(8, 6))
+plt.plot(results_df["fraction_of_comparisons"], results_df["pair_completeness"], label="Pair Completeness")
+plt.xlabel("Fraction of Comparisons")
+plt.ylabel("Pair Completeness")
+plt.title("Pair Completeness for Different Fractions of Comparisons")
+plt.grid()
+plt.legend()
+plt.show()
+
+# Plot Pair Quality vs Fraction of Comparisons
+plt.figure(figsize=(8, 6))
+plt.plot(results_df["fraction_of_comparisons"], results_df["pair_quality"], label="Pair Quality")
+plt.xlabel("Fraction of Comparisons")
+plt.ylabel("Pair Quality")
+plt.title("Pair Quality for Different Fractions of Comparisons")
+plt.grid()
+plt.legend()
+plt.show()
+
+# Plot F1 Measure vs Fraction of Comparisons
+plt.figure(figsize=(8, 6))
+plt.plot(results_df["fraction_of_comparisons"], results_df["f1_measure"], label="F1 Measure")
+plt.xlabel("Fraction of Comparisons")
+plt.ylabel("F1 Measure")
+plt.title("F1 Measure for Different Fractions of Comparisons")
+plt.grid()
+plt.legend()
+plt.show()
+
+# Plot F1* Measure vs Fraction of Comparisons
+plt.figure(figsize=(8, 6))
+plt.plot(results_df["fraction_of_comparisons"], results_df["f1_measure"], marker='o', label="F1*-Measure")
+plt.xlabel("Fraction of Comparisons")
+plt.ylabel("F1*-Measure")
+plt.title("F1*-Measure for Different Fractions of Comparisons")
+plt.grid()
+plt.legend()
+plt.show()
