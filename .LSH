@@ -234,7 +234,6 @@ cluster_threshold = 0.2
 df_encoded['cluster'] = fcluster(linkage(condensed_dissimilarity, method='single'),
                                  t=cluster_threshold, criterion='distance')
 
-print("Clustering completed. Assigned clusters to data.")
 
 # Evaluating different (b, r) configurations
 
