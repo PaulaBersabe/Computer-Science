@@ -14,7 +14,7 @@ file_path = r"C:\Users\marta\OneDrive\Desktop\paula\Master_Rotterdam\block 2\Com
 with open(file_path, 'r') as f:
     data = json.load(f)
 
-# Convert JSON data to DataFrame
+# Converting JSON data to DataFrame
 rows = []
 for product_id, shops in data.items():
     for shop in shops:
@@ -42,7 +42,7 @@ df.rename(columns={
 numeric_features = ["screen_size", "refresh_rate"]
 categorical_features = ["brand", "resolution", "tv_type"]
 
-# Numeric features
+# Converting numeric features
 df["screen_size"] = pd.to_numeric(df["screen_size"].str.extract(r'(\d+(\.\d+)?)', expand=False)[0], errors='coerce')
 df["refresh_rate"] = pd.to_numeric(df["refresh_rate"].str.extract(r'(\d+)', expand=False), errors='coerce')
 
@@ -57,7 +57,7 @@ def fill_with_most_common(column):
 for feature in categorical_features:
     fill_with_most_common(feature)
 
-# One-hot encoding of categorical and normalizing numeric features
+# One-hot encoding of categorical and normalize numeric
 df_encoded = pd.get_dummies(df, columns=categorical_features)
 df_encoded[numeric_features] = (df_encoded[numeric_features] - df_encoded[numeric_features].min()) / (
     df_encoded[numeric_features].max() - df_encoded[numeric_features].min())
@@ -208,10 +208,9 @@ def is_true_duplicate(idx1, idx2):
     model_id2 = df_encoded.loc[idx2, 'modelID']
     return model_id1 == model_id2 and model_id1 != 'unknown'
 
-#Hierarchical clustering
+# Hierarchical Clustering
 
-
-#Dissimilarity matrix
+# Dissimilarity matrix
 dissimilarity_matrix = np.full((len(df_encoded), len(df_encoded)), float('inf'))
 for idx1, idx2 in combinations(range(len(df_encoded)), 2):
     if is_true_duplicate(idx1, idx2):
@@ -222,21 +221,21 @@ for idx1, idx2 in combinations(range(len(df_encoded)), 2):
     dissimilarity_matrix[idx1, idx2] = dissimilarity
     dissimilarity_matrix[idx2, idx1] = dissimilarity
 
-# Replacing inf with a large number for clustering
+# Replacement of inf with a large number for clustering
 finite_dissimilarity_matrix = np.where(np.isinf(dissimilarity_matrix), 1e9, dissimilarity_matrix)
 # Condensed dissimilarity matrix for linkage
 condensed_dissimilarity = squareform(finite_dissimilarity_matrix, checks=False)
 
-#Clustering threshold
+
 cluster_threshold = 0.2
 
-#Hierarchical clustering using single linkage
+# Hierarchical clustering using single linkage
 df_encoded['cluster'] = fcluster(linkage(condensed_dissimilarity, method='single'),
                                  t=cluster_threshold, criterion='distance')
 
 
-# Evaluating different (b, r) configurations
-
+# Evaluation of different (b, r) configurations
+# Moved below clustering to maintain logical flow
 b_values_plot = [1, 2, 4, 5, 10]
 r_values_plot = [n // b for b in b_values_plot]
 thresholds_plot = [(1 / b_val) ** (1 / r_val) for b_val, r_val in zip(b_values_plot, r_values_plot)]
@@ -287,17 +286,17 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# After evaluating (b, r), I chose b=10 and r=10 as fixed configuration
+# After evaluating combinations of (b, r), chose b=10 and r=10 for the rest of the code
 b = 10
 r = 10
 t = (1 / b) ** (1 / r)
 
 print(f"\nUsing fixed configuration: b={b}, r={r}, threshold={t:.4f}")
 
-# Redefining bands with the chosen configuration
+# Redefine bands with the chosen configuration
 df_encoded['bands'] = df_encoded['signatures'].apply(lambda x: split_vector(x, b))
 
-# Preparing features for MSM similarity
+# Features for MSM similarity
 columns_to_drop = ['model_words', 'one_hot_model_words', 'signatures', 'bands', 'modelID', 'title', 'shop']
 df_features = df_encoded.drop(columns=columns_to_drop, errors='ignore').select_dtypes(include=[np.number])
 df_features = df_features.reindex(sorted(df_features.columns), axis=1)
@@ -356,7 +355,7 @@ def compute_msm_similarity(idx1, idx2, alpha=0.3, beta=0.2, gamma=0.2, delta=0.2
     )
     return combined_similarity
 
-# Bootstrapping with the chosen configuration (b=10, r=10)
+#Bootstrapping with the chosen configuration (b=10, r=10)
 print("Starting bootstrapping...")
 
 alpha_value = 0.3
@@ -440,7 +439,7 @@ for b_iter in range(num_bootstraps):
         'f1_star_measure': f1_star_measure
     })
 
-# Average metrics across all bootstraps
+#Average metrics across all bootstraps
 avg_precision = np.mean([m['precision'] for m in bootstrap_metrics])
 avg_recall = np.mean([m['recall'] for m in bootstrap_metrics])
 avg_f1_measure = np.mean([m['f1_measure'] for m in bootstrap_metrics])
@@ -456,8 +455,6 @@ print(f"Average Pair Quality: {avg_pair_quality:.4f}")
 print(f"Average Pair Completeness: {avg_pair_completeness:.4f}")
 print(f"Average F1*-Measure: {avg_f1_star_measure:.4f}")
 
-#Plots
-
 def calculate_metrics(candidate_pairs, true_duplicates, total_comparisons):
     tp = len([pair for pair in candidate_pairs if pair in true_duplicates])
     fp = len(candidate_pairs) - tp
@@ -470,7 +467,7 @@ def calculate_metrics(candidate_pairs, true_duplicates, total_comparisons):
 
     return pair_quality, pair_completeness, f1_measure, fraction_of_comparisons
 
-# Generation of true duplicates and total comparisons
+# Generate true duplicates and total comparisons
 all_indices = list(range(len(df_encoded)))
 true_duplicates = set([tuple(sorted((i, j))) for i, j in combinations(all_indices, 2) if is_true_duplicate(i, j)])
 total_comparisons = len(all_indices) * (len(all_indices) - 1) // 2
@@ -498,10 +495,10 @@ for b, r, t in zip(b_values, r_values, thresholds):
         "fraction_of_comparisons": fraction_of_comparisons,
     })
 
-# Converting results to DataFrame for plotting
+# Convert results to DataFrame for plotting
 results_df = pd.DataFrame(results)
 
-# Plot of Pair Completeness vs Fraction of Comparisons
+# Plot Pair Completeness vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["pair_completeness"], label="Pair Completeness")
 plt.xlabel("Fraction of Comparisons")
@@ -511,7 +508,7 @@ plt.grid()
 plt.legend()
 plt.show()
 
-# Plot of Pair Quality vs Fraction of Comparisons
+# Plot Pair Quality vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["pair_quality"], label="Pair Quality")
 plt.xlabel("Fraction of Comparisons")
@@ -521,7 +518,7 @@ plt.grid()
 plt.legend()
 plt.show()
 
-# Plot of F1 Measure vs Fraction of Comparisons
+# Plot F1 Measure vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["f1_measure"], label="F1 Measure")
 plt.xlabel("Fraction of Comparisons")
@@ -531,7 +528,7 @@ plt.grid()
 plt.legend()
 plt.show()
 
-# Plot of F1* Measure vs Fraction of Comparisons
+# Plot F1* Measure vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["f1_measure"], marker='o', label="F1*-Measure")
 plt.xlabel("Fraction of Comparisons")
@@ -540,3 +537,4 @@ plt.title("F1*-Measure for Different Fractions of Comparisons")
 plt.grid()
 plt.legend()
 plt.show()
+
