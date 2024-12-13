@@ -2,33 +2,36 @@
 # Duplicate Product Detection Using LSH
 
 This project introduces a methodology to identify duplicate products in large-scale e-commerce datasets.
-the following steps are involved:
--**Data cleaning and preprocesing for consistency**
+the following steps are involved in the code:
+- **Data cleaning and preprocesing for consistency**.
 - **Model words** and **key-value pairs** extracted from product attributes.
 - **Locality Sensitive Hashing (LSH)** to efficiently select candidate pairs.
 - **MinHash signatures** and a **banding technique** to reduce comparisons.
+- **Tuning of parameters b and r**
 - A **Multi-Component Similarity (MSM)** metric combining cosine, Jaccard, Q-gram, key-value matching, and hierarchical structure matching.
 - **Hierarchical clustering** to group related duplicates.
 - **bootstrapping** to obtain robust metrics.
+- **Final display of the obtained metrics**
 
 ## Project Structure
 
 - **Data Loading and Preprocessing**: 
-  - Loads a JSON file of product attributes.
+  - JSON file loaded with TV's attributes.
   - Cleans and normalizes numeric and categorical features.
-  - Extracts model words and applies one-hot encoding.
+  - Extraction of model words and key value pairs and one-hot encoding.
 
 - **LSH Candidate Generation**:
-  - Creates MinHash signatures from one-hot encoded model words.
-  - Uses banding to form buckets of similar items and identify candidate duplicates.
+  - Creation of MinHash signatures from one-hot encoded model words.
+  - Banding to form buckets of similar items and identify candidate duplicates.
 
 - **Similarity Computation and Clustering**:
-  - Calculates MSM similarity scores for candidate pairs.
-  - Performs hierarchical clustering to refine duplicate detection.
+  - Definition of MSM similarity scores for candidate pairs.
+  - Hierarchical clustering to refine duplicate detection.
 
 - **Evaluation**:
-  - Uses bootstrapping to assess performance stability.
-  - Reports metrics (Precision, Recall, F1, Pair Quality, Pair Completeness, F1*).
+  - Bootstrapping to assess performance stability.
+  - Reporting metrics (Precision, Recall, F1, Pair Quality, Pair Completeness, F1*).
+  - Generation of plots for "Pair completeness", "Pair Quality", "F1 score" and "F1* score" vs the fractions of comparisons. 
 
 ## How to Use the Code
 
