@@ -10,15 +10,15 @@ the following steps are involved in the code:
 - **Tuning of parameters b and r**
 - A **Multi-Component Similarity (MSM)** metric combining cosine, Jaccard, Q-gram, key-value matching, and hierarchical structure matching.
 - **Hierarchical clustering** to group related duplicates.
-- **bootstrapping** to obtain robust metrics.
+- **Bootstrapping** to obtain robust metrics.
 - **Final display of the obtained metrics**
 
 ## Project Structure
 
 - **Data Loading and Preprocessing**: 
   - JSON file loaded with TV's attributes.
-  - Cleans and normalizes numeric and categorical features.
-  - Extraction of model words and key value pairs and one-hot encoding.
+  - Cleaning and normalizing numeric and categorical features.
+  - Extraction of model words (including top_brands) and key value pairs and one-hot encoding.
 
 - **LSH Candidate Generation**:
   - Creation of MinHash signatures from one-hot encoded model words.
