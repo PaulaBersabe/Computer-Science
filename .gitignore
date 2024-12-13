@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt  # For plotting graphs
 from scipy.spatial.distance import squareform
 from scipy.cluster.hierarchy import linkage, fcluster
 
-# Step 1: Load the JSON file
+# Load the JSON file
 file_path = r"C:\Users\marta\OneDrive\Desktop\paula\Master_Rotterdam\block 2\Computer science for business analytics\Paper\TVs-all-merged\TVs-all-merged.json"
 with open(file_path, 'r') as f:
     data = json.load(f)
@@ -29,7 +29,7 @@ df = pd.DataFrame(rows)
 # Core features
 core_features = ["Brand", "Screen Size Class", "Maximum Resolution", "Screen Refresh Rate", "TV Type"]
 
-# Rename columns
+# Renaming columns
 df.rename(columns={
     "Screen Size Class": "screen_size",
     "Brand": "brand",
@@ -46,10 +46,10 @@ categorical_features = ["brand", "resolution", "tv_type"]
 df["screen_size"] = pd.to_numeric(df["screen_size"].str.extract(r'(\d+(\.\d+)?)', expand=False)[0], errors='coerce')
 df["refresh_rate"] = pd.to_numeric(df["refresh_rate"].str.extract(r'(\d+)', expand=False), errors='coerce')
 
-# Fill missing numeric values with mean
+# Filling missing numeric values with mean
 df[numeric_features] = df[numeric_features].apply(lambda x: x.fillna(x.mean()))
 
-# Fill missing categorical values with most common (mode)
+# Filling missing categorical values with most common (mode)
 def fill_with_most_common(column):
     most_common = df[column].mode()[0] if not df[column].mode().empty else "unknown"
     df[column] = df[column].fillna(most_common)
@@ -124,7 +124,7 @@ def extract_all_model_words(row):
 
 df_encoded['model_words'] = df_encoded.apply(extract_all_model_words, axis=1)
 
-# Build vocabulary
+# Building vocabulary
 vocab = list(set().union(*df_encoded['model_words']))
 vocab_index = {model_word: idx for idx, model_word in enumerate(vocab)}
 
@@ -471,7 +471,7 @@ def calculate_metrics(candidate_pairs, true_duplicates, total_comparisons):
 
     return pair_quality, pair_completeness, f1_measure, fraction_of_comparisons
 
-# Generate true duplicates and total comparisons
+# Generation of true duplicates and total comparisons
 all_indices = list(range(len(df_encoded)))
 true_duplicates = set([tuple(sorted((i, j))) for i, j in combinations(all_indices, 2) if is_true_duplicate(i, j)])
 total_comparisons = len(all_indices) * (len(all_indices) - 1) // 2
@@ -499,10 +499,10 @@ for b, r, t in zip(b_values, r_values, thresholds):
         "fraction_of_comparisons": fraction_of_comparisons,
     })
 
-# Convert results to DataFrame for plotting
+# Converting results to DataFrame for plotting
 results_df = pd.DataFrame(results)
 
-# Plot Pair Completeness vs Fraction of Comparisons
+# Plot of Pair Completeness vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["pair_completeness"], label="Pair Completeness")
 plt.xlabel("Fraction of Comparisons")
@@ -512,7 +512,7 @@ plt.grid()
 plt.legend()
 plt.show()
 
-# Plot Pair Quality vs Fraction of Comparisons
+# Plot of Pair Quality vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["pair_quality"], label="Pair Quality")
 plt.xlabel("Fraction of Comparisons")
@@ -522,7 +522,7 @@ plt.grid()
 plt.legend()
 plt.show()
 
-# Plot F1 Measure vs Fraction of Comparisons
+# Plot of F1 Measure vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["f1_measure"], label="F1 Measure")
 plt.xlabel("Fraction of Comparisons")
@@ -532,7 +532,7 @@ plt.grid()
 plt.legend()
 plt.show()
 
-# Plot F1* Measure vs Fraction of Comparisons
+# Plot of F1* Measure vs Fraction of Comparisons
 plt.figure(figsize=(8, 6))
 plt.plot(results_df["fraction_of_comparisons"], results_df["f1_measure"], marker='o', label="F1*-Measure")
 plt.xlabel("Fraction of Comparisons")
