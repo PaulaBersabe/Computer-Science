@@ -2,7 +2,7 @@
 # Duplicate Product Detection Using LSH
 
 This project introduces a methodology to identify duplicate products in large-scale e-commerce datasets.
-the following steps are involved in the code:
+The following steps are involved in the code:
 - **Data cleaning and preprocesing for consistency**.
 - **Model words** and **key-value pairs** extracted from product attributes.
 - **Locality Sensitive Hashing (LSH)** to efficiently select candidate pairs.
