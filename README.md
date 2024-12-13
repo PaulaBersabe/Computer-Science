@@ -7,11 +7,11 @@ The following steps are involved in the code:
 - **Model words** and **key-value pairs** extracted from product attributes.
 - **Locality Sensitive Hashing (LSH)** to efficiently select candidate pairs.
 - **MinHash signatures** and a **banding technique** to reduce comparisons.
-- **Tuning of parameters b and r**
+- **Tuning of parameters b and r**.
 - A **Multi-Component Similarity (MSM)** metric combining cosine, Jaccard, Q-gram, key-value matching, and hierarchical structure matching.
 - **Hierarchical clustering** to group related duplicates.
 - **Bootstrapping** to obtain robust metrics.
-- **Final display of the obtained metrics**
+- **Final display of the obtained metrics**.
 
 ## Project Structure
 
